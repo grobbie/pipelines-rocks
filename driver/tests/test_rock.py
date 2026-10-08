@@ -72,7 +72,7 @@ def test_rock(rock_test_env):
         text=True,
     )
 
-    combined = result.stdout + result.stderr if result.stderr else result.stdout
+    combined = result.stdout
     # The driver prints a fatal message starting with "KFP driver:"
     # when it fails on business logic — that proves it's the right binary.
     assert "KFP driver:" in combined, (

@@ -86,7 +86,7 @@ def test_rock(rock_test_env):
         text=True,
     )
 
-    combined = result.stdout + result.stderr if result.stderr else result.stdout
+    combined = result.stdout
     # The launcher either fails on MLMD connection or a required flag —
     # both messages prove the binary is functional (not a crash).
     assert (

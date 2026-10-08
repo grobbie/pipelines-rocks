@@ -42,7 +42,7 @@ parts:
       - ca-certificates
     override-build: |
       # Download chisel binary directly (not in Ubuntu apt repos).
-      CHISEL_VER="v1.0.0"
+      CHISEL_VER="v1.5.1"
       curl -sL "https://github.com/canonical/chisel/releases/download/${CHISEL_VER}/chisel_${CHISEL_VER}_linux_amd64.tar.gz" \
         | tar xzf - -C /usr/local/bin chisel
       chmod +x /usr/local/bin/chisel

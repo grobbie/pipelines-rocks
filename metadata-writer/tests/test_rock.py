@@ -10,10 +10,16 @@ import subprocess
 
 from charmed_kubeflow_chisme.rock import CheckRock
 
+# Polling constants
+DEADLINE_SECONDS = 30
+POLL_INTERVAL_SECONDS = 2
+
 
 @pytest.fixture()
 def rock_test_env(tmpdir):
-    """Yields a temporary directory and random docker container name."""
+    """Yields a temporary directory and random docker container name.
+    Cleans up the container after the test.
+    """
     container_name = "".join(
         random.choices(string.ascii_lowercase, k=8)
     )
@@ -27,6 +33,44 @@ def rock_test_env(tmpdir):
         )
     except Exception:
         pass
+
+
+def _pebble_services(container_name):
+    """Run `pebble services` inside *container_name* and return the output."""
+    return subprocess.run(
+        [
+            "docker",
+            "exec",
+            container_name,
+            "/usr/bin/pebble",
+            "services",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
+
+def _container_running(container_name):
+    """Return True if the container is still running, False otherwise."""
+    result = subprocess.run(
+        ["docker", "inspect", "-f", "{{.State.Running}}", container_name],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    return result.stdout.strip() == "true"
+
+
+def _container_logs(container_name):
+    """Return the container logs (stdout+stderr)."""
+    result = subprocess.run(
+        ["docker", "logs", container_name],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    return result.stdout
 
 
 @pytest.mark.abort_on_fail
@@ -57,37 +101,44 @@ def test_rock(rock_test_env):
         check=True,
     )
 
-    # Give Pebble a few seconds to start the daemon and default services.
-    deadline = time.time() + 30
+    # Poll pebble services until kfp-metadata-writer reaches a valid state.
     service_active = False
-    result = None
-    while time.time() < deadline:
-        time.sleep(2)
-        result = subprocess.run(
-            [
-                "docker",
-                "exec",
-                container_name,
-                "/usr/bin/pebble",
-                "services",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        if "kfp-metadata-writer" in result.stdout and "active" in result.stdout:
-            service_active = True
+    last_result = None
+    deadline = time.monotonic() + DEADLINE_SECONDS
+    while time.monotonic() < deadline:
+        time.sleep(POLL_INTERVAL_SECONDS)
+
+        if not _container_running(container_name):
+            last_result = _pebble_services(container_name)
+            logs = _container_logs(container_name)
+            subprocess.run(
+                ["docker", "rm", "-f", container_name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            raise AssertionError(
+                f"Container exited before kfp-metadata-writer reached a valid state.\n"
+                f"Last pebble services output:\n{last_result.stdout}\n"
+                f"Container logs:\n{logs}"
+            )
+
+        last_result = _pebble_services(container_name)
+        # The metadata-writer is K8s-native: outside a cluster it starts, fails
+        # to reach the K8s API, and Pebble retries — so "backoff" is also valid.
+        for line in last_result.stdout.splitlines():
+            fields = line.split()
+            if len(fields) >= 3 and fields[0] == "kfp-metadata-writer" and fields[2] in ("active", "backoff"):
+                service_active = True
+                break
+
+        if service_active:
             break
 
-    # Clean up before asserting to avoid dangling containers.
-    subprocess.run(
-        ["docker", "rm", "-f", container_name],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    logs = _container_logs(container_name)
 
     assert service_active, (
-        f"kfp-metadata-writer did not reach 'active' within 30 s.\n"
-        f"pebble services output:\n"
-        f"{result.stdout if result else '(no response from pebble)'}"
+        f"kfp-metadata-writer did not reach 'active' within {DEADLINE_SECONDS} s.\n"
+        f"Last pebble services output:\n"
+        f"{last_result.stdout if last_result else '(no response from pebble)'}\n"
+        f"Container logs:\n{logs}"
     )

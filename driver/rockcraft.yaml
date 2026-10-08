@@ -7,10 +7,6 @@
 # dependencies are a /etc skeleton and the TLS CA certificate bundle
 # (Go's crypto/x509 reads /etc/ssl/certs for K8s API, object stores, and
 # gRPC connections).
-#
-# The upstream Dockerfile runtime stage is alpine:3.21 with ONLY the binary
-# — bash is NOT needed. The previous ubuntu@22.04 base + stage-packages
-# carried ~95 debs; Chisel reduces this to what the binary actually loads.
 name: kfp-driver
 summary: Kubeflow Pipelines Driver
 description: This image is used as part of the Charmed Kubeflow product
@@ -36,7 +32,7 @@ parts:
     build-packages:
       - ca-certificates
     override-build: |
-      CHISEL_VER="v1.0.0"
+      CHISEL_VER="v1.5.1"
       curl -sL "https://github.com/canonical/chisel/releases/download/${CHISEL_VER}/chisel_${CHISEL_VER}_linux_amd64.tar.gz" \
         | tar xzf - -C /usr/local/bin chisel
       chmod +x /usr/local/bin/chisel

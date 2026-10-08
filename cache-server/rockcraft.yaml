@@ -7,11 +7,6 @@
 # a minimal /etc skeleton and the TLS CA certificate bundle for Go's
 # crypto/x509.SystemCertPool() to connect to the Kubernetes API and any
 # external object stores.
-#
-# The upstream Dockerfile's runtime stage (alpine:3.21, binary-only) confirms
-# bash is NOT needed at runtime — it was build-time only (apk add bash). The
-# previous ubuntu@22.04 base + stage-packages pulled ~95 debs' worth of CVEs;
-# Chisel slices them down to what is actually loaded.
 name: cache-server
 summary: Kubeflow Pipelines Cache Server
 description: This image is used as part of the Charmed Kubeflow product
@@ -37,7 +32,7 @@ parts:
     build-packages:
       - ca-certificates
     override-build: |
-      CHISEL_VER="v1.0.0"
+      CHISEL_VER="v1.5.1"
       curl -sL "https://github.com/canonical/chisel/releases/download/${CHISEL_VER}/chisel_${CHISEL_VER}_linux_amd64.tar.gz" \
         | tar xzf - -C /usr/local/bin chisel
       chmod +x /usr/local/bin/chisel
